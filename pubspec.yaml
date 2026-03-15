@@ -1,0 +1,63 @@
+name: mansur_gym_mobile
+description: Sistem pencatatan pengunjung gym Mansur Exercise Point - Mobile Version
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Database
+  sqflite: ^2.3.0
+  path: ^1.8.3
+  path_provider: ^2.1.1
+  
+  
+  # State Management
+  provider: ^6.1.1
+  
+  # UI
+  cupertino_icons: ^1.0.6
+  intl: ^0.18.1
+  flutter_svg: ^2.0.9
+  
+  # Bluetooth Printer
+  # blue_thermal_printer: ^1.2.5  # Disabled - package deprecated
+  permission_handler: ^11.1.0
+  
+  # Notifications
+  flutter_local_notifications: ^17.2.3
+  
+  # Charts
+  fl_chart: ^0.66.0
+  flutter_thermal_printer: ^2.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter:
+  uses-material-design: true
+  
+  # Icon configuration
+  # Letakkan file icon.png di folder assets/
+  
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon.png"
+  adaptive_icon_background: "#2c3e50"
+  adaptive_icon_foreground: "assets/icon.png"
+  
+  # assets:
+  #   - images/
+  
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
