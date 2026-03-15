@@ -106,5 +106,5 @@ File APK akan tersedia di: `build/app/outputs/flutter-apk/app-release.apk`
 
 ## Lisensi
 
-Project ini dibuat untuk keperluan internal. Seluruh hak cipta milik pemilik usaha **Mansur Exercise Point**.
+OPEN SOURCE!
 
