@@ -2,12 +2,14 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
   static final NotificationService instance = NotificationService._init();
-  final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _notifications =
+      FlutterLocalNotificationsPlugin();
 
   NotificationService._init();
 
   Future<void> initialize() async {
-    const androidSettings = AndroidInitializationSettings('@drawable/ic_notification');
+    const androidSettings =
+        AndroidInitializationSettings('@drawable/ic_notification');
     const settings = InitializationSettings(android: androidSettings);
 
     await _notifications.initialize(
@@ -19,7 +21,8 @@ class NotificationService {
 
     // Request notification permission for Android 13+
     await _notifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
   }
 
@@ -42,9 +45,9 @@ class NotificationService {
 
     final typeLabel = type == 'daily' ? 'Harian' : 'Member';
     final priceFormatted = 'Rp ${price.toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (Match m) => '${m[1]}.',
-    )}';
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (Match m) => '${m[1]}.',
+        )}';
 
     await _notifications.show(
       DateTime.now().millisecondsSinceEpoch.remainder(100000),

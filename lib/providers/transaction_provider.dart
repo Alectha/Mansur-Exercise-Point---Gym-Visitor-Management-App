@@ -53,4 +53,22 @@ class TransactionProvider extends ChangeNotifier {
   int get memberCount {
     return _transactions.where((t) => t.transactionType == 'monthly').length;
   }
+
+  int getTotalIncomeForDate(DateTime date) {
+    return _transactions
+        .where((t) =>
+            t.createdAt.year == date.year &&
+            t.createdAt.month == date.month &&
+            t.createdAt.day == date.day)
+        .fold(0, (sum, t) => sum + t.price);
+  }
+
+  List<Transaction> getTransactionsForDate(DateTime date) {
+    return _transactions
+        .where((t) =>
+            t.createdAt.year == date.year &&
+            t.createdAt.month == date.month &&
+            t.createdAt.day == date.day)
+        .toList();
+  }
 }

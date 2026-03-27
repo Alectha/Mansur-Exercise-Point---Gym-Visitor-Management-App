@@ -28,22 +28,12 @@ class CustomTextField extends StatelessWidget {
       validator: validator,
       onChanged: onChanged,
       maxLines: maxLines,
+      style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: icon != null ? Icon(icon) : null,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF2c3e50), width: 2),
-        ),
-        filled: true,
-        fillColor: Colors.white,
+        hintText: 'Masukkan $label',
+        prefixIcon:
+            icon != null ? Icon(icon, color: const Color(0xFF4FC3F7)) : null,
       ),
     );
   }

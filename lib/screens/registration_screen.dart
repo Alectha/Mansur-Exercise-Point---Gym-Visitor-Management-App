@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/member.dart';
 import '../models/transaction.dart';
+import '../models/registration_package.dart';
 import '../providers/member_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/settings_provider.dart';
-import '../services/notification_service.dart';
 import '../services/bluetooth_printer_service.dart';
 import '../widgets/custom_textfield.dart';
 
@@ -20,8 +20,16 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  String _registrationType = 'daily';
+  RegistrationPackage? _selectedPackage;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      Provider.of<SettingsProvider>(context, listen: false).loadSettings();
+    });
+  }
 
   @override
   void dispose() {
@@ -32,40 +40,48 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedPackage == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Silakan pilih paket pendaftaran'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 
     try {
-      final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-      final transactionProvider = Provider.of<TransactionProvider>(context, listen: false);
-      final memberProvider = Provider.of<MemberProvider>(context, listen: false);
+      final settingsProvider =
+          Provider.of<SettingsProvider>(context, listen: false);
+      final transactionProvider =
+          Provider.of<TransactionProvider>(context, listen: false);
+      final memberProvider =
+          Provider.of<MemberProvider>(context, listen: false);
 
       final name = _nameController.text.trim();
       final phone = _phoneController.text.trim();
       final now = DateTime.now();
 
       int? memberId;
-      int price;
+      int price = _selectedPackage!.price;
 
-      if (_registrationType == 'monthly') {
-        // Create member
-        final member = Member(
-          name: name,
-          phone: phone.isEmpty ? null : phone,
-          joinDate: now,
-          expireDate: DateTime(now.year, now.month + 1, now.day),
-          createdAt: now,
-        );
-        memberId = await memberProvider.addMember(member);
-        price = settingsProvider.monthlyPrice;
-      } else {
-        price = settingsProvider.dailyPrice;
-      }
+      // Automatically create member if it's a monthly program type or any custom logic?
+      // For dynamic packages, we might not always know if it's a 1-month member, but to keep old behavior, let's say we create a member for every purchase that isn't simple daily. Or maybe create member for all? Let's just create Member object so they are tracked, default to 30 days active for any package (or you can customize later).
+      final member = Member(
+        name: name,
+        phone: phone.isEmpty ? null : phone,
+        joinDate: now,
+        expireDate: DateTime(now.year, now.month + 1, now.day),
+        createdAt: now,
+      );
+      memberId = await memberProvider.addMember(member);
 
       // Create transaction
       final transaction = Transaction(
         name: name,
-        transactionType: _registrationType,
+        transactionType: _selectedPackage!.name,
         price: price,
         checkInTime: now,
         memberId: memberId,
@@ -73,25 +89,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       );
       await transactionProvider.addTransaction(transaction);
 
-      // Show notification (skip if not initialized)
-      try {
-        await NotificationService.instance.showTransactionNotification(
-          name: name,
-          type: _registrationType,
-          price: price,
-        );
-      } catch (e) {
-        print('Notification error (skipped): $e');
-      }
-
-      // Show success dialog with print option
       if (!mounted) return;
-      _showSuccessDialog(transaction, settingsProvider);
+      _showSuccessBottomSheet(transaction, settingsProvider);
 
       // Reset form
       _nameController.clear();
       _phoneController.clear();
-      setState(() => _registrationType = 'daily');
+      setState(() => _selectedPackage = null);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -105,48 +109,155 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     }
   }
 
-  void _showSuccessDialog(Transaction transaction, SettingsProvider settings) {
-    showDialog(
+  void _showSuccessBottomSheet(
+      Transaction transaction, SettingsProvider settings) {
+    showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Registrasi Berhasil'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Nama: ${transaction.name}'),
-            Text('Tipe: ${transaction.typeLabel}'),
-            Text('Harga: Rp ${_formatPrice(transaction.price)}'),
-            const SizedBox(height: 16),
-            const Text('Cetak struk?'),
-          ],
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1E1E1E), // Dark Theme
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Tidak'),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF4FC3F7), Color(0xFF0288D1)],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF4FC3F7).withOpacity(0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        )
+                      ]),
+                  child: const Icon(Icons.check_circle_rounded,
+                      color: Colors.white, size: 48),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Registrasi Berhasil!',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2C2C2C),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF333333)),
+                  ),
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Nama',
+                              style: TextStyle(color: Color(0xFFAAAAAA))),
+                          Text(transaction.name,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white)),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Paket',
+                              style: TextStyle(color: Color(0xFFAAAAAA))),
+                          Text(transaction.transactionType,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white)),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      const Divider(color: Color(0xFF404040)),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Total',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white)),
+                          Text(
+                            'Rp ${_formatPrice(transaction.price)}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 18,
+                                color: Color(0xFF4FC3F7)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      await _printReceipt(transaction, settings);
+                    },
+                    icon: const Icon(Icons.print_rounded),
+                    label: const Text('Cetak Struk',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Tutup',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _printReceipt(transaction, settings);
-            },
-            child: const Text('Cetak'),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Future<void> _printReceipt(Transaction transaction, SettingsProvider settings) async {
+  Future<void> _printReceipt(
+      Transaction transaction, SettingsProvider settings) async {
     try {
       final printer = BluetoothPrinterService.instance;
-      
+
       if (!await printer.isConnected()) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Printer belum terhubung. Hubungkan di menu Pengaturan'),
+            content:
+                Text('Printer belum terhubung. Hubungkan di menu Pengaturan'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -183,278 +294,356 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   String _formatPrice(int price) {
     return price.toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (Match m) => '${m[1]}.',
-    );
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (Match m) => '\.',
+        );
   }
 
   @override
   Widget build(BuildContext context) {
-    final settings = Provider.of<SettingsProvider>(context);
+    final settingsProvider = Provider.of<SettingsProvider>(context);
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: const Text('Registrasi'),
-        backgroundColor: const Color(0xFF2c3e50),
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 600),
-          padding: const EdgeInsets.all(16),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                  // Header
-                  Container(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: Column(
-                      children: [
-                        const Icon(
-                          Icons.fitness_center,
-                          size: 48,
-                          color: Color(0xFF2c3e50),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'MANSUR EXERCISE POINT',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF2c3e50),
-                            letterSpacing: 1.5,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          width: 60,
-                          height: 3,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF2c3e50), Color(0xFF3c5470)],
-                            ),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                // Form fields
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Profil',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF2c3e50),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      CustomTextField(
-                        controller: _nameController,
-                        label: 'Nama Lengkap',
-                        icon: Icons.person_outline,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Nama wajib diisi';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      CustomTextField(
-                        controller: _phoneController,
-                        label: 'Nomor HP (Opsional)',
-                        icon: Icons.phone_outlined,
-                        keyboardType: TextInputType.phone,
-                      ),
-                    ],
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 180,
+            floating: false,
+            pinned: true,
+            elevation: 0,
+            backgroundColor: const Color(0xFF121212),
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0xFF1E1E1E), Color(0xFF121212)],
                   ),
                 ),
-                const SizedBox(height: 16),
-                // Type selection
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 24.0, vertical: 24.0),
                   child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Pilih Paket',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF2c3e50),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
                       Row(
                         children: [
-                          Expanded(
-                            child: _buildTypeCard(
-                              'daily',
-                              'Harian',
-                              'Rp ${_formatPrice(settings.dailyPrice)}',
-                              Icons.today_rounded,
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.asset(
+                              'assets/images/app_icon.png',
+                              width: 48,
+                              height: 48,
+                              fit: BoxFit.cover,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildTypeCard(
-                              'monthly',
-                              'Member',
-                              'Rp ${_formatPrice(settings.monthlyPrice)}',
-                              Icons.card_membership_rounded,
+                          const SizedBox(width: 16),
+                          const Expanded(
+                            child: Text(
+                              'MANSUR EXERCISE POINT',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                                letterSpacing: 1.0,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // Submit button
-                Container(
-                  height: 52,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: _isLoading
-                          ? [Colors.grey[400]!, Colors.grey[500]!]
-                          : [const Color(0xFF2c3e50), const Color(0xFF3c5470)],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: (_isLoading ? Colors.grey : const Color(0xFF2c3e50)).withOpacity(0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
+                      const SizedBox(height: 16),
+                      Container(
+                        width: 60,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF4FC3F7), Color(0xFF0288D1)],
+                          ),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
                     ],
                   ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: _isLoading ? null : _handleSubmit,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Center(
-                        child: _isLoading
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2.5,
-                                ),
-                              )
-                            : const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.check_circle_outline, color: Colors.white, size: 22),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Daftarkan',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ),
-                  ),
                 ),
-              ],
+              ),
             ),
           ),
-        ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Form fields
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E1E),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: const Color(0xFF2C2C2C)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 15,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Data Diri',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFFE0E0E0),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          CustomTextField(
+                            controller: _nameController,
+                            label: 'Nama Lengkap',
+                            icon: Icons.person_outline_rounded,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Nama wajib diisi';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          CustomTextField(
+                            controller: _phoneController,
+                            label: 'Nomor HP (Opsional)',
+                            icon: Icons.phone_outlined,
+                            keyboardType: TextInputType.phone,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    // Type selection
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E1E),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: const Color(0xFF2C2C2C)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 15,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Pilih Paket',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFFE0E0E0),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          if (settingsProvider.isLoading)
+                            const Center(child: CircularProgressIndicator())
+                          else if (settingsProvider.packages.isEmpty)
+                            const Center(
+                              child: Text(
+                                'Belum ada paket tersedia.\nTambahkan di menu Pengaturan.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            )
+                          else
+                            GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                mainAxisSpacing: 16,
+                                crossAxisSpacing: 16,
+                                childAspectRatio: 1.0,
+                              ),
+                              itemCount: settingsProvider.packages.length,
+                              itemBuilder: (context, index) {
+                                final pkg = settingsProvider.packages[index];
+                                return _buildTypeCard(pkg);
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    // Submit button
+                    Container(
+                      height: 56,
+                      decoration: BoxDecoration(
+                        gradient: _isLoading
+                            ? null
+                            : const LinearGradient(
+                                colors: [Color(0xFF4FC3F7), Color(0xFF0288D1)],
+                              ),
+                        color: _isLoading ? const Color(0xFF333333) : null,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: _isLoading
+                            ? null
+                            : [
+                                BoxShadow(
+                                  color:
+                                      const Color(0xFF4FC3F7).withOpacity(0.3),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _isLoading ? null : _handleSubmit,
+                          borderRadius: BorderRadius.circular(16),
+                          child: Center(
+                            child: _isLoading
+                                ? const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 3,
+                                    ),
+                                  )
+                                : const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.check_circle_outline_rounded,
+                                          color: Colors.white, size: 24),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Daftarkan',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 100), // padding for bottom nav
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildTypeCard(String value, String title, String price, IconData icon) {
-    final isSelected = _registrationType == value;
+  Widget _buildTypeCard(RegistrationPackage package) {
+    final isSelected = _selectedPackage?.id == package.id;
 
     return GestureDetector(
-      onTap: () => setState(() => _registrationType = value),
-      child: AnimatedOpacity(
+      onTap: () {
+        setState(() => _selectedPackage = package);
+      },
+      child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        opacity: isSelected ? 1.0 : 0.6,
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            gradient: isSelected
-                ? const LinearGradient(
-                    colors: [Color(0xFF2c3e50), Color(0xFF3c5470)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF4FC3F7).withOpacity(0.1)
+              : const Color(0xFF2C2C2C),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color:
+                isSelected ? const Color(0xFF4FC3F7) : const Color(0xFF333333),
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF4FC3F7).withOpacity(0.2),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
                   )
-                : null,
-            color: isSelected ? null : Colors.grey[50],
-            border: Border.all(
-              color: isSelected ? const Color(0xFF2c3e50) : Colors.grey.shade300,
-              width: isSelected ? 2 : 1.5,
+                ]
+              : [],
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            if (isSelected)
+              const Positioned(
+                top: 12,
+                right: 12,
+                child: Icon(Icons.check_circle_rounded,
+                    color: Color(0xFF4FC3F7), size: 20),
+              ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? const Color(0xFF4FC3F7)
+                          : const Color(0xFF1E1E1E),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.star_rounded, // default icon
+                      color:
+                          isSelected ? Colors.white : const Color(0xFF757575),
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    package.name,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight:
+                          isSelected ? FontWeight.w800 : FontWeight.w600,
+                      color:
+                          isSelected ? Colors.white : const Color(0xFFCCCCCC),
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Rp ${_formatPrice(package.price)}',
+                    style: TextStyle(
+                      color: isSelected
+                          ? const Color(0xFF4FC3F7)
+                          : const Color(0xFF757575),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                size: 28,
-                color: isSelected ? Colors.white : const Color(0xFF2c3e50),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: isSelected ? Colors.white : const Color(0xFF2c3e50),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                price,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isSelected ? Colors.white.withOpacity(0.9) : Colors.grey.shade600,
-                ),
-              ),
-            ],
-          ),
+          ],
         ),
       ),
     );

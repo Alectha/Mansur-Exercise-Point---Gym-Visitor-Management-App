@@ -33,4 +33,14 @@ class MemberProvider extends ChangeNotifier {
   Future<Member?> getMember(int id) async {
     return await DatabaseHelper.instance.getMember(id);
   }
+
+  Future<void> updateMember(Member member) async {
+    await DatabaseHelper.instance.updateMember(member);
+    await loadMembers();
+  }
+
+  Future<void> deleteMember(int id) async {
+    await DatabaseHelper.instance.deleteMember(id);
+    await loadMembers();
+  }
 }

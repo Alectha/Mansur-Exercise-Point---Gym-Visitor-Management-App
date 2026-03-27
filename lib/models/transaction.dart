@@ -42,7 +42,22 @@ class Transaction {
   }
 
   String get typeLabel {
-    return transactionType == 'daily' ? 'Harian' : 'Member';
+    switch (transactionType) {
+      case 'per_sesi':
+        return 'Per Sesi (Harian)';
+      case 'trainer':
+        return 'Trainer';
+      case 'program':
+        return 'Program Latihan';
+      case 'therapy':
+        return 'Terapi';
+      case 'daily':
+        return 'Harian';
+      case 'monthly':
+        return 'Member';
+      default:
+        return transactionType;
+    }
   }
 
   Transaction copyWith({

@@ -13,6 +13,9 @@
     <!-- Notification permission for Android 13+ -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
+    <!-- Required for Flutter debug VM service -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:label="Mansur Gym"
         android:name="${applicationName}">

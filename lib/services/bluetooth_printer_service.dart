@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:flutter_thermal_printer/flutter_thermal_printer.dart';
 import 'package:flutter_thermal_printer/utils/printer.dart';
+import 'package:image/image.dart' as img;
 import 'package:permission_handler/permission_handler.dart';
 
 class BluetoothPrinterService {
-  static final BluetoothPrinterService instance = BluetoothPrinterService._init();
+  static final BluetoothPrinterService instance =
+      BluetoothPrinterService._init();
 
   final FlutterThermalPrinter _plugin = FlutterThermalPrinter.instance;
   Printer? _selectedPrinter;
@@ -114,19 +118,26 @@ class BluetoothPrinterService {
     required String footer,
   }) async {
     try {
-      if (_selectedPrinter == null || !(_selectedPrinter!.isConnected ?? false)) {
+      if (_selectedPrinter == null ||
+          !(_selectedPrinter!.isConnected ?? false)) {
         throw Exception('Printer tidak terhubung');
       }
 
       final typeLabel = type == 'daily' ? 'Harian' : 'Member';
       final priceFormatted = 'Rp ${price.toString().replaceAllMapped(
-        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-        (Match m) => '${m[1]}.',
-      )}';
+            RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+            (Match m) => '${m[1]}.',
+          )}';
 
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm58, profile);
       List<int> bytes = [];
+
+      final logoBytes = await _loadReceiptLogoBytes();
+      if (logoBytes != null) {
+        bytes += generator.imageRaster(logoBytes, align: PosAlign.center);
+        bytes += generator.feed(1);
+      }
 
       // Header
       bytes += generator.text(
@@ -134,8 +145,9 @@ class BluetoothPrinterService {
         styles: const PosStyles(
           align: PosAlign.center,
           bold: true,
-          height: PosTextSize.size2,
-          width: PosTextSize.size2,
+          // Mengurangi ukuran headline sesuai permintaan (dari size2 ke normal tapi bold)
+          height: PosTextSize.size1,
+          width: PosTextSize.size1,
         ),
       );
       bytes += generator.hr();
@@ -143,15 +155,24 @@ class BluetoothPrinterService {
       // Detail
       bytes += generator.row([
         PosColumn(text: 'Nama', width: 4, styles: const PosStyles(bold: true)),
-        PosColumn(text: name, width: 8, styles: const PosStyles(align: PosAlign.right)),
+        PosColumn(
+            text: name,
+            width: 8,
+            styles: const PosStyles(align: PosAlign.right)),
       ]);
       bytes += generator.row([
         PosColumn(text: 'Tipe', width: 4, styles: const PosStyles(bold: true)),
-        PosColumn(text: typeLabel, width: 8, styles: const PosStyles(align: PosAlign.right)),
+        PosColumn(
+            text: typeLabel,
+            width: 8,
+            styles: const PosStyles(align: PosAlign.right)),
       ]);
       bytes += generator.row([
         PosColumn(text: 'Harga', width: 4, styles: const PosStyles(bold: true)),
-        PosColumn(text: priceFormatted, width: 8, styles: const PosStyles(align: PosAlign.right)),
+        PosColumn(
+            text: priceFormatted,
+            width: 8,
+            styles: const PosStyles(align: PosAlign.right)),
       ]);
       bytes += generator.row([
         PosColumn(text: 'Waktu', width: 4, styles: const PosStyles(bold: true)),
@@ -198,5 +219,40 @@ class BluetoothPrinterService {
     final hour = dateTime.hour.toString().padLeft(2, '0');
     final minute = dateTime.minute.toString().padLeft(2, '0');
     return '$day/$month/$year $hour:$minute';
+  }
+
+  Future<img.Image?> _loadReceiptLogoBytes() async {
+    const candidatePaths = [
+      'assets/images/receipt_icon.png',
+      'assets/images/receipt_logo.png',
+    ];
+
+    for (final assetPath in candidatePaths) {
+      try {
+        final data = await rootBundle.load(assetPath);
+        final bytes = data.buffer.asUint8List();
+        final decoded = img.decodeImage(bytes);
+        if (decoded == null) {
+          continue;
+        }
+
+        final resized = img.copyResize(decoded, width: 256);
+        final grayscale = img.grayscale(resized);
+        return _ensureDivisibleBy8(grayscale);
+      } catch (_) {
+        // Skip missing/invalid asset and try next candidate.
+      }
+    }
+
+    return null;
+  }
+
+  img.Image _ensureDivisibleBy8(img.Image image) {
+    if (image.width % 8 == 0) {
+      return image;
+    }
+
+    final nextDivisible = image.width + (8 - (image.width % 8));
+    return img.copyResize(image, width: nextDivisible);
   }
 }
